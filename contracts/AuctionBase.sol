@@ -4,7 +4,20 @@ import "openzeppelin-solidity/contracts/token/ERC721/ERC721Full.sol";
 
 contract AuctionBase {
     // Reference to contract tracking NFT ownership
-    ERC721 public nonFungibleContract;
+    ERC721 public nonFungibleContract = ERC721(0x75fa856caf598e59a7e15cd9a438d3a40b9715b4);
+    struct Auction {
+        // current owner of NFT
+        address seller;
+        // Price (in wei) at beginning of auction
+        uint128 startingPrice;
+        // Price (in wei) at end of auction
+        uint128 endingPrice;
+        // Duration (in seconds) of auction
+        uint64 duration;
+        // Time when auction started
+        // NOTE: 0 if this auction has been concluded
+        uint64 startedAt;
+    }
 
     // Map from token ID to their corresponding auction.
     mapping (uint256 => Auction) tokenIdToAuction;
@@ -18,20 +31,6 @@ contract AuctionBase {
     event AuctionSuccessful(uint256 _tokenId, uint256 _totalPrice, address winner);
     event AuctionCancelled(uint256 _tokenId);
 
-    struct Auction {
-        // current owner of NFT
-        address seller;
-        // Price (in wei) at beginning of auction
-        uint128 startingPrice;
-        // Price (in wei) at end of auction
-        uint128 endingPrice;
-        // Duration (in seconds) of auction
-        uint256 duration;
-        // Time when auction started
-        // NOTE: 0 if this auction has been concluded
-        uint64 startedAt;
-    }
-
     /// @dev DON'T give me money
     function() external {}
 
@@ -40,6 +39,10 @@ contract AuctionBase {
     /// @param _tokenId - ID of token whose ownership to verify.
     function _owns(address _claimant, uint256 _tokenId) internal view returns (bool) {
         return (nonFungibleContract.ownerOf(_tokenId) == _claimant);
+    }
+
+    function _getApproved(address contractAddress, uint256 _tokenId) internal view returns(bool) {
+        return (nonFungibleContract.getApproved(_tokenId) == contractAddress);
     }
 
     /// @dev Escrows the NFT, assigning ownership to this contract.
@@ -56,8 +59,8 @@ contract AuctionBase {
     /// @param _receiver - Address to transfer NFT to
     // /// @param _tokenId - ID of token to transfer
 
-    function _transfer(address _receiver, uint256 _tokenId) internal {
-        nonFungibleContract.transferFrom(address(this), _receiver, _tokenId);
+    function _transfer(address _receiver, uint256 _tokenId, address seller) internal {
+        nonFungibleContract.transferFrom(seller, _receiver, _tokenId);
     }
 
     /// @dev Adds an auction to the list of open auctions, also fires the
@@ -78,13 +81,13 @@ contract AuctionBase {
     /// @dev Cancels an auction unconditionally.
     function _cancelAuction(uint256 _tokenId, address _seller) internal {
         _removeAuction(_tokenId);
-        _transfer(_seller, _tokenId);
+        _transfer(_seller, _tokenId, address(this));
         emit AuctionCancelled(_tokenId);
     }
 
     /// @dev Computes the price and transfers winnings.
     /// Does NOT transfer ownership of token.
-    function _bid(uint256 _tokenId, uint256 _bidAmount) internal returns (uint256) {
+    function _bid(uint256 _tokenId, uint256 _bidAmount) internal returns (address) {
         // Get a reference to the auction struct
         Auction storage auction = tokenIdToAuction[_tokenId];
 
@@ -114,6 +117,7 @@ contract AuctionBase {
             //  value <= price, so this subtraction can't go negative.)
             uint256 auctioneerCut = _computeCut(price);
             uint256 sellerProceeds = price - auctioneerCut;
+            // sellerProceeds *= 1000000000000000000;
 
             // NOTE: Doing a transfer() in the middle of a complex
             // method like this is generally discouraged because of
@@ -129,7 +133,7 @@ contract AuctionBase {
         // Tell the world!
         emit AuctionSuccessful(_tokenId, price, msg.sender);
 
-        return price;
+        return seller;
     }
 
     /// @dev Removes an auction from the list of open auctions.

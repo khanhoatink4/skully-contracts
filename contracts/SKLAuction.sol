@@ -12,10 +12,10 @@ contract SKLAuction is Pausable, AuctionBase {
     ///  the Nonfungible Interface.
     /// @param _cut - percent cut the owner takes on each auction, must be
     ///  between 0-10,000.
-//    function SKLAuction() public {
-//         ERC721 candidateContract = ERC721();
-//         nonFungibleContract = candidateContract;
-//    }
+    //    function SKLAuction() public {
+    //         ERC721 candidateContract = ERC721();
+    //         nonFungibleContract = candidateContract;
+    //    }
 
     // /// @dev Remove all Ether from the contract, which is the owner's cuts
     // ///  as well as any Ether sent directly to the contract address.
@@ -46,8 +46,8 @@ contract SKLAuction is Pausable, AuctionBase {
         address _seller
     ) public whenNotPaused {
         require(_owns(msg.sender, _tokenId));
-        require(asset.getApproved(_assetId) == address(this));
-    Auction memory auction = Auction(
+        require(_getApproved(address(this), _tokenId));
+        Auction memory auction = Auction(
             _seller,
             uint128(_startingPrice),
             uint128(_endingPrice),
@@ -62,10 +62,10 @@ contract SKLAuction is Pausable, AuctionBase {
     /// @param _tokenId - ID of token to bid on.
     function bid(uint256 _tokenId) public payable whenNotPaused {
         // _bid will throw if the bid or funds transfer fails
-        _bid(_tokenId, msg.value);
-        _transfer(msg.sender, _tokenId);
+        address seller = _bid(_tokenId, msg.value);
+        _transfer(msg.sender, _tokenId, seller);
         PO8BaseToken token = PO8BaseToken(0x1357c8ecb58ba4c193b192b43682cd8edb75e09e);
-        token.transfer(msg.sender, 5);
+        token.transferFrom(0xd37AE76bBc61e86a7D643a1291F1f6a951AA2E2B, seller, 5 * 1000000000000000000);
     }
 
     /// @dev Cancels an auction that hasn't been won yet.
